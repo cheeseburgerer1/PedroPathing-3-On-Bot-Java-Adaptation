@@ -9,8 +9,8 @@ jobs:
   compile:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '8'
@@ -33,3 +33,26 @@ jobs:
           boot=$(find "$libs" -name '*.jar' | sort | paste -sd :)
           javac -encoding UTF-8 -source 8 -target 8 -proc:none -bootclasspath "$boot" -d "$out" @"$RUNNER_TEMP/sources"
           java -cp "$out" org.firstinspires.ftc.teamcode.pedro.PathGeometryCheck
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build Android DEX
+        run: |
+          jar cf "$RUNNER_TEMP/pedro.jar" -C "$RUNNER_TEMP/pedro-classes" .
+          d8=$(find "$ANDROID_HOME/build-tools" -name d8 | sort -V | tail -1)
+          "$d8" --min-api 24 --lib "$RUNNER_TEMP/onbot/android.jar" \
+            --classpath "$RUNNER_TEMP/onbot/onbotjava-classes.jar" \
+            --output "$RUNNER_TEMP/pedro-dex.zip" "$RUNNER_TEMP/pedro.jar"
+      - name: Enable emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - name: Run the diagnostic on Android 7.1
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 25
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: |
+            adb push "$RUNNER_TEMP/pedro-dex.zip" /data/local/tmp/pedro-dex.zip
+            adb shell dalvikvm -cp /data/local/tmp/pedro-dex.zip org.firstinspires.ftc.teamcode.pedro.PathGeometryCheck
