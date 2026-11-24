@@ -1,0 +1,35 @@
+name: Compile OnBot Java sources
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+      - name: Extract FTC 12.0 OnBot compiler libraries
+        run: |
+          curl --fail --location --retry 3 --silent --show-error \
+            https://github.com/FIRST-Tech-Challenge/FtcRobotController/releases/download/v12.0/FtcRobotController-release.apk \
+            -o "$RUNNER_TEMP/rc.apk"
+          echo "0f5a94fad17e7e114a7839328f41e92bda7e7a419a6b732df53446a48b5cd972  $RUNNER_TEMP/rc.apk" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/onbot"
+          unzip -jo "$RUNNER_TEMP/rc.apk" 'assets/*jar' -d "$RUNNER_TEMP/onbot"
+          test -s "$RUNNER_TEMP/onbot/android.jar"
+          test -s "$RUNNER_TEMP/onbot/onbotjava-classes.jar"
+      - name: Compile every source and run path checks
+        run: |
+          libs="$RUNNER_TEMP/onbot"
+          out="$RUNNER_TEMP/pedro-classes"
+          mkdir -p "$out"
+          find src -name '*.java' | sort > "$RUNNER_TEMP/sources"
+          boot=$(find "$libs" -name '*.jar' | sort | paste -sd :)
+          javac -encoding UTF-8 -source 8 -target 8 -proc:none -bootclasspath "$boot" -d "$out" @"$RUNNER_TEMP/sources"
+          java -cp "$out" org.firstinspires.ftc.teamcode.pedro.PathGeometryCheck
